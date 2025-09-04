@@ -1,11 +1,11 @@
 import express from "express"
-import { OrderSchema } from "../validations/zod"
+import { OrderSchema } from "@repo/validations/zod"
 import { redis } from "@repo/redis/client"
 const router = express.Router()
 
 
 
-router.post("/create", async(req, res) => {
+ router.post("/create", async(req, res) => {
     const parsedData = OrderSchema.safeParse(req.body)
     if (!parsedData.success) {
         return res.status(403).json({

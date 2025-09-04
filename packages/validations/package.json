@@ -1,0 +1,18 @@
+{
+  "name": "@repo/validations",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "exports":{
+      "./zod":"./index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "zod": "^4.1.5"
+  }
+}

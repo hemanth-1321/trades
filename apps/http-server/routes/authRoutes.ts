@@ -1,5 +1,5 @@
 import express, { Router } from "express"
-import { userSchema } from "../validations/zod"
+import { userSchema } from "@repo/validations/zod"
 import jwt from "jsonwebtoken"
 import nodemailer from "nodemailer"
 const router = express.Router()
