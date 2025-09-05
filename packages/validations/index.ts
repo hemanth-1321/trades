@@ -9,5 +9,5 @@ export const OrderSchema = z.object({
     type: z.enum(["long", "short"]),
     margin: z.number(),
     leverage: z.number(),
-    slippage: z.number()
+    quantity:z.number()
 })

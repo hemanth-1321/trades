@@ -18,7 +18,8 @@
     "nodemailer": "^7.0.6",
     "zod": "^4.1.5",
     "@repo/redis":"*",
-    "@repo/validations":"*"
+    "@repo/validations":"*",
+    "@repo/db":"*"
   }
 
 }

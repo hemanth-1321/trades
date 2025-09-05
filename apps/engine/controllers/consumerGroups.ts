@@ -1,5 +1,6 @@
 import { redis } from "@repo/redis/client"
 import { latestPrice, pendingOrders } from "./states"
+import { createOrder } from "./OrderProcessing"
 const priceStream = "trade-stream"
 const orderStream = "trade-order"
 
@@ -33,7 +34,7 @@ export async function initConsumerGroups() {
 }
 
 /**
- * consumer for prices stream
+ * consumer for prices stream from pooler
  */
 export async function consumePrices() {
     const consumerName = `price-consumer-${Math.floor(Math.random() * 1000)}`
@@ -101,6 +102,7 @@ export async function consumeOrders() {
             const [streamKey, messages] = res[0] as [string, [string, string[]][]]
 
             for (const [id, fields] of messages) {
+                console.log("orderId",id)
                 const dataIdx = fields.findIndex((f) => f === "data")
 
                 if (dataIdx === -1) {
@@ -123,17 +125,16 @@ export async function consumeOrders() {
                         }
 
                         for (const order of orderData) {
-                            pendingOrders.push({ id, data: order })
+                        //todo=calclualte the opening=price=quantity * assetPrice
+
+                            createOrder(order,id)
+                            console.log("order",order)
                         }
 
-                        console.log("pending orders", pendingOrders)
 
                     } catch (parseError) {
                         console.error("Error parsing order data:", parseError)
                     }
-
-                    console.log("pending orders", pendingOrders)
-
                 } catch (parseError) {
                     console.error("Error parsing order data:", parseError)
 
@@ -189,6 +190,7 @@ export async function main() {
         await Promise.all([
             consumePrices(),
             consumeOrders()
+            // deleteConsumerGroups()
         ])
     } catch (error) {
         console.error("Error in main:", error)

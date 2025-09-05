@@ -1,7 +1,16 @@
-import{z} from "zod"
-import { OrderSchema } from "@repo/validations/zod"
 
-type Order=z.infer<typeof OrderSchema>
-export const latestPrice:Record<string,{price:number,decimal:number,id:string}>={}
+export interface Order {
+    id:string,
+    asset: string
+    userId:string,
+    type: "long" | "short",
+    margin?: number,
+    leverage?: number,
+    quantity:number,
+    openingPrice:number,
+    stopLoss?:number,
+    exposure?:number,
+}
+export const latestPrice: Record<string, { price: number, decimal: number, id: string }> = {}
 
-export const pendingOrders:{id:string,data:Order}[]=[]
+export const pendingOrders: { id: string, data: Order }[] = []

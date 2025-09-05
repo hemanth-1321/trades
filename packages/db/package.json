@@ -1,7 +1,10 @@
 {
-  "name": "engine",
+  "name": "@repo/db",
   "module": "index.ts",
   "type": "module",
+  "exports": {
+    "./client": "./index.ts"
+  },
   "private": true,
   "devDependencies": {
     "@types/bun": "latest"
@@ -10,9 +13,7 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@repo/redis": "*",
-    "@repo/validations": "*",
-    "@repo/db":"*",
-    "zod": "^4.1.5"
+    "@prisma/client": "^6.15.0",
+    "prisma": "^6.15.0"
   }
 }
