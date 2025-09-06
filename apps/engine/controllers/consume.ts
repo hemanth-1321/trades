@@ -104,6 +104,7 @@ async function consumeOrders() {
     }
   }
 }
+
 export async function main() {
   try {
     console.log("Starting consumers...");

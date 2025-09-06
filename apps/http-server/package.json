@@ -28,6 +28,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/nodemailer": "^7.0.1",
     "express": "^5.1.0",
+    "ioredis": "^5.7.0",
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^7.0.6",
     "vitest": "^3.2.4",

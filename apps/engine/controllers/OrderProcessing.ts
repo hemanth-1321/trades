@@ -1,15 +1,15 @@
 import { pendingOrders, type Order } from "./states";
 import { prisma } from "@repo/db/client";
 import { redis } from "@repo/redis/client";
+
 interface CheckOrdersParams {
   symbol: string;
   price: number;
 }
 
 /**
- * creates a order by pushing it to in memory array of of object => pendingOrders
+ * Creates an order by pushing it to the in-memory array `pendingOrders`
  */
-
 export const createOrder = async (
   order: Order,
   id: string,
@@ -17,42 +17,43 @@ export const createOrder = async (
 ) => {
   const { userId, leverage, quantity } = order;
   const openingPrice = priceInfo.price / 10 ** priceInfo.decimal;
-  console.log("opening", openingPrice);
   order.openingPrice = openingPrice;
+
   try {
     const user = await prisma.user.findUnique({ where: { id: userId } });
-
     if (!user) throw new Error("User not found");
 
     const exposure = openingPrice * quantity * leverage!;
     order.exposure = exposure;
-    console.log("User balance before:", user.balance);
 
     if (user.balance <= openingPrice) {
-      console.log("insuffient balance");
+      console.log("Insufficient balance");
       return;
     }
-    const newBalance = user.balance - openingPrice;
-    console.log("new balance", newBalance);
-    console.log("new balance", Number(newBalance));
 
+    const newBalance = user.balance - openingPrice;
     await prisma.user.update({
-      where: {
-        id: user.id,
-      },
-      data: {
-        balance: newBalance,
-      },
+      where: { id: user.id },
+      data: { balance: newBalance },
     });
 
-    const defaultStopLoss =
-      order.type == "long" ? openingPrice * 0.98 : openingPrice * 1.02;
-    order.stopLoss = defaultStopLoss;
+    // Set default stop loss
+    order.stopLoss =
+      order.type === "long" ? openingPrice * 0.98 : openingPrice * 1.02;
     order.processed = true;
-    pendingOrders.push({ id, data: order });
-    redis.xadd("callback", "*", "uid", JSON.stringify(order.orderId));
-    console.log("pending order", pendingOrders);
 
+    // Add to in-memory pending orders and push to Redis
+    pendingOrders.push({ id, data: order });
+    redis.xadd(
+      "callback-queue",
+      "*",
+      "uid",
+      order.orderId,
+      "data",
+      JSON.stringify(order)
+    );
+
+    console.log("Pending order:", pendingOrders);
     return { success: true, order };
   } catch (error) {
     console.log("Error creating order", error);
@@ -60,29 +61,32 @@ export const createOrder = async (
   }
 };
 
-/**closes the order if  */
+/**
+ * Automatically closes orders if stop loss conditions are met
+ */
 export const autoClose = async ({ symbol, price }: CheckOrdersParams) => {
-  for (const orders of pendingOrders) {
-    const { id: orderId, data: order } = orders;
+  for (const { id: orderId, data: order } of pendingOrders) {
+    if (order.asset.toLowerCase() !== symbol.toLowerCase()) continue;
 
-    if (order.asset.toLocaleLowerCase() != symbol.toLocaleLowerCase()) continue;
-
-    if (
-      (order.type == "long" &&
+    const shouldClose =
+      (order.type === "long" &&
         order.stopLoss !== undefined &&
         price <= order.stopLoss) ||
-      (order.type == "short" &&
+      (order.type === "short" &&
         order.stopLoss !== undefined &&
-        price >= order.stopLoss)
-    ) {
+        price >= order.stopLoss);
+
+    if (shouldClose) {
       await closeOrder({ orderId, closingPrice: price })
-        .then((result) => console.log("order closed sucessfully", result))
+        .then((res) => console.log("Order closed successfully", res))
         .catch((err) => console.log("Error closing order", err));
     }
   }
 };
 
-/**close order*/
+/**
+ * Closes an order and updates user balance
+ */
 export const closeOrder = async ({
   orderId,
   closingPrice,
@@ -90,52 +94,37 @@ export const closeOrder = async ({
   orderId: string;
   closingPrice: number;
 }) => {
-  const order = pendingOrders.find((o) => o.id === orderId);
-  console.log("orderId", order);
-  if (!order) {
-    return {
-      status: 404,
-      message: "order not found",
-    };
-  }
+  const orderEntry = pendingOrders.find((o) => o.id === orderId);
+  if (!orderEntry) return { status: 404, message: "Order not found" };
 
   const user = await prisma.user.findUnique({
-    where: {
-      id: order?.data.userId,
-    },
+    where: { id: orderEntry.data.userId },
   });
-  if (!user) {
-    return {
-      status: 404,
-      message: "order not found",
-    };
-  }
+  if (!user) return { status: 404, message: "User not found" };
 
-  const pnl = calclualtePnl(order.data, Number(closingPrice));
+  const pnl = calculatePnl(orderEntry.data, closingPrice);
 
   await prisma.user.update({
-    where: {
-      id: order.data.userId,
-    },
-    data: {
-      balance: user.balance + pnl!,
-    },
+    where: { id: orderEntry.data.userId },
+    data: { balance: user.balance + pnl },
   });
 
-  //finds the order index from the pendingOrders array
+  // Remove order from pendingOrders
   const index = pendingOrders.findIndex((o) => o.id === orderId);
-  //remove one element
-  if (index > -1) {
-    pendingOrders.splice(index, 1);
-  }
+  if (index > -1) pendingOrders.splice(index, 1);
 };
 
-function calclualtePnl(order: Order, closingPrice: number) {
-  if (order.type == "long") {
+/**
+ * Calculates PnL for an order
+ */
+function calculatePnl(order: Order, closingPrice: number) {
+  if (order.type === "long") {
     return (
       (closingPrice - order.openingPrice) * order.quantity * order.leverage!
     );
   } else {
-    (order.openingPrice - closingPrice) * order.quantity * order.leverage!;
+    return (
+      (order.openingPrice - closingPrice) * order.quantity * order.leverage!
+    );
   }
 }

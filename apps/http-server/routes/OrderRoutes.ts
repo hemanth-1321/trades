@@ -3,8 +3,9 @@ import { OrderSchema } from "@repo/validations/zod";
 import { redis } from "@repo/redis/client";
 import { authMiddleware } from "../middleware/middleware";
 import { v4 as uuidv4 } from "uuid";
+import { CallbackQueueConsumer } from "../redis-subscriber/index";
 const router = express.Router();
-
+const consumer = new CallbackQueueConsumer();
 router.post("/create", authMiddleware, async (req, res) => {
   const parsedData = OrderSchema.safeParse(req.body);
   const userId = req.userId;
@@ -25,7 +26,11 @@ router.post("/create", authMiddleware, async (req, res) => {
       JSON.stringify(payload)
     );
 
-    return res.status(200).json({ message: "Order queued", orderId });
+    const responseFromEngine = await consumer.waitForMessage(uid);
+
+    return res
+      .status(200)
+      .json({ message: "Order queued", orderId, responseFromEngine });
   } catch (err) {
     console.log(err);
     return res.status(500).json({ message: "Error creating order" });
