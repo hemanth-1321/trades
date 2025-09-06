@@ -1,6 +1,6 @@
 import { pendingOrders, type Order } from "./states";
 import { prisma } from "@repo/db/client";
-
+import { redis } from "@repo/redis/client";
 interface CheckOrdersParams {
   symbol: string;
   price: number;
@@ -9,18 +9,16 @@ interface CheckOrdersParams {
 /**
  * creates a order by pushing it to in memory array of of object => pendingOrders
  */
-export const createOrder = async (order: Order, id: string) => {
-  console.log("id", id);
-  const {
-    userId,
-    asset,
-    leverage,
-    margin,
-    type,
-    openingPrice = 200,
-    quantity,
-  } = order;
-  console.log("orderid", id);
+
+export const createOrder = async (
+  order: Order,
+  id: string,
+  priceInfo: { price: number; decimal: number; id: string }
+) => {
+  const { userId, leverage, quantity } = order;
+  const openingPrice = priceInfo.price / 10 ** priceInfo.decimal;
+  console.log("opening", openingPrice);
+  order.openingPrice = openingPrice;
   try {
     const user = await prisma.user.findUnique({ where: { id: userId } });
 
@@ -50,8 +48,9 @@ export const createOrder = async (order: Order, id: string) => {
     const defaultStopLoss =
       order.type == "long" ? openingPrice * 0.98 : openingPrice * 1.02;
     order.stopLoss = defaultStopLoss;
+    order.processed = true;
     pendingOrders.push({ id, data: order });
-
+    redis.xadd("callback", "*", "uid", JSON.stringify(order.orderId));
     console.log("pending order", pendingOrders);
 
     return { success: true, order };
@@ -60,9 +59,6 @@ export const createOrder = async (order: Order, id: string) => {
     throw error;
   }
 };
-
-
-
 
 /**closes the order if  */
 export const autoClose = async ({ symbol, price }: CheckOrdersParams) => {
@@ -79,8 +75,8 @@ export const autoClose = async ({ symbol, price }: CheckOrdersParams) => {
         order.stopLoss !== undefined &&
         price >= order.stopLoss)
     ) {
-      await close({ orderId, closingPrice: price })
-        .then((result) => console.log("order closed sucessfully",result))
+      await closeOrder({ orderId, closingPrice: price })
+        .then((result) => console.log("order closed sucessfully", result))
         .catch((err) => console.log("Error closing order", err));
     }
   }

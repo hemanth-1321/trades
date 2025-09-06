@@ -21,7 +21,9 @@ router.post("/signup", async (req, res) => {
   }
 
   // Sign JWT with user ID
-  const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET!, { expiresIn: "1h" });
+  const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET!, {
+    expiresIn: "1h",
+  });
   const link = `${process.env.AUTH_URL}/token=${token}`;
 
   // Send magic link via email
@@ -40,30 +42,33 @@ router.post("/signup", async (req, res) => {
       html: `<a href="${link}">Click here to verify your email</a>`,
     });
 
-    return res.status(200).json({ message: "Magic link sent successfully", link });
+    return res
+      .status(200)
+      .json({ message: "Magic link sent successfully", link });
   } catch (err) {
     console.log(err);
     return res.status(500).json({ message: "Internal server error" });
   }
 });
 
-
 router.get("/token=:token", async (req, res) => {
   const { token } = req.params;
   if (!token) return res.status(404).json({ message: "Token not found" });
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: string };
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
+      id: string;
+    };
 
     // Set cookie for auth
     res.cookie("auth", token, { httpOnly: true });
 
-    return res.status(200).json({ message: "Login successful", userId: decoded.id });
+    return res
+      .status(200)
+      .json({ message: "Login successful", userId: decoded.id });
   } catch {
     return res.status(401).json({ message: "Login not successful" });
   }
 });
 
-
-
-export default router
+export default router;

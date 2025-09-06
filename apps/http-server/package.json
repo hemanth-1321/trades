@@ -4,22 +4,33 @@
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/jest": "^30.0.0",
+    "@types/supertest": "^6.0.3",
+    "jest": "^30.1.3",
+    "supertest": "^7.1.4",
+    "ts-jest": "^29.4.1",
+    "vitest-mock-extended": "^3.1.0"
+  },
+  "scripts": {
+    "dev": "bun bin.ts",
+    "test": "vitest"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
+    "@jest/globals": "^30.1.2",
+    "@repo/db": "*",
+    "@repo/redis": "*",
+    "@repo/validations": "*",
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/nodemailer": "^7.0.1",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^7.0.6",
-    "zod": "^4.1.5",
-    "@repo/redis":"*",
-    "@repo/validations":"*",
-    "@repo/db":"*"
+    "vitest": "^3.2.4",
+    "zod": "^4.1.5"
   }
-
 }

@@ -1,3 +1,3 @@
-import { main } from "./controllers/consumerGroups";
+import { main } from "./controllers/consume";
 
-main()
+main();
