@@ -107,6 +107,7 @@ export const closeOrder = async ({
 
   const payload = {
     closingPrice,
+    pnl,
     ...orderEntry.data,
   };
   if (index > -1) {

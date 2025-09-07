@@ -14,19 +14,16 @@ router.post("/signup", async (req, res) => {
 
   const email = parsed.data.email;
 
-  // Create or find existing user
   let user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     user = await prisma.user.create({ data: { email } });
   }
 
-  // Sign JWT with user ID
   const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET!, {
     expiresIn: "1h",
   });
   const link = `${process.env.AUTH_URL}/token=${token}`;
 
-  // Send magic link via email
   try {
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
@@ -36,7 +33,7 @@ router.post("/signup", async (req, res) => {
     });
 
     await transporter.sendMail({
-      from: `"Super30 Trading" <${process.env.FROM_EMAIL}>`,
+      from: `"Trading Engine" <${process.env.FROM_EMAIL}>`,
       to: email,
       subject: "Verify your account - Super30 Trading",
       html: `<a href="${link}">Click here to verify your email</a>`,

@@ -10,9 +10,10 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@repo/db": "*",
     "@repo/redis": "*",
     "@repo/validations": "*",
-    "@repo/db":"*",
+    "mongoose": "^8.18.0",
     "zod": "^4.1.5"
   }
 }

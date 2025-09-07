@@ -6,6 +6,7 @@ import {
   type CheckOrdersParams,
 } from "./OrderProcessing";
 import { da } from "zod/locales";
+import { takeSnapshot } from "./snapShots";
 
 const priceStream = "trade-stream";
 const orderStream = "trade-order";
@@ -187,13 +188,11 @@ const autoClose = async ({ symbol, price }: CheckOrdersParams) => {
 export async function main() {
   try {
     console.log("Starting consumers...");
-    // setInterval(() => {
-    //   console.log(
-    //     "latestPrice snapshot:",
-    //     JSON.stringify(latestPrice, null, 2)
-    //   );
-    // }, 1000);
-    // Run consumers concurrently
+    setInterval(() => {
+      (async () => {
+        await takeSnapshot(pendingOrders, latestPrice);
+      })();
+    }, 10_100);
     await Promise.all([consumePrices(), consumeOrders(), OrderClose()]);
   } catch (error) {
     console.error("Error in main:", error);

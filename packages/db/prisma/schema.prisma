@@ -13,10 +13,32 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id           String         @id @default(uuid())
+  email        String         @unique
+  balance      Float          @default(5000.00)
+  createdAt    DateTime       @default(now())
+  ClosedTrades ClosedTrades[]
+}
 
-model User{
-  id String @id @default(uuid())
-  email String @unique
-  balance Float @default(5000.00)
-  createdAt DateTime @default(now())
+model ClosedTrades {
+  id           String   @id @default(uuid())
+  orderId      String   @unique
+  openingPrice Float
+  closingPrice Float
+  leverage     Float
+  pnl          Float
+  asset        String
+  type         TYPE
+  quantity     Float
+  exposure     Float
+  liquidated   Boolean?
+  user         User     @relation(fields: [userId], references: [id])
+  userId       String
+  createdAt    DateTime @default(now())
+}
+
+enum TYPE {
+  long
+  short
 }
