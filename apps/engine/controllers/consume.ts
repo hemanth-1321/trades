@@ -1,12 +1,17 @@
-import { json } from "zod";
 import { orderRedis, priceRedis } from "../redis";
 import { latestPrice, pendingOrders, type Order } from "./states";
-import { createOrder } from "./OrderProcessing";
+import {
+  closeOrder,
+  createOrder,
+  type CheckOrdersParams,
+} from "./OrderProcessing";
+import { da } from "zod/locales";
 
 const priceStream = "trade-stream";
 const orderStream = "trade-order";
-
+const closeOrderStream = "close-order";
 /**consume prices from the pooler and  */
+
 async function consumePrices() {
   let lastId = "$";
   while (true) {
@@ -39,6 +44,7 @@ async function consumePrices() {
           for (const item of parsedData) {
             const { asset, price, decimal } = item;
             latestPrice[asset] = { price, decimal, id };
+            await autoClose({ symbol: asset, price });
           }
         } catch (error) {
           console.error("Error parsing price data:", error);
@@ -105,17 +111,90 @@ async function consumeOrders() {
   }
 }
 
+async function OrderClose() {
+  let lastId = "$";
+  while (1) {
+    try {
+      const res = await orderRedis.xread(
+        "COUNT",
+        1,
+        "BLOCK",
+        0,
+        "STREAMS",
+        closeOrderStream,
+        lastId
+      );
+      if (!res || res.length === 0) {
+        console.log("response is null");
+
+        continue;
+      }
+      const [streamKey, messages] = res[0] as [string, [string, string[]][]];
+      for (const [id, fields] of messages) {
+        // console.log("feilds", fields); //feilds [ "uid", "368081bd-cf6b-4eb0-933e-20efcfd42bb7", "data", "{\"orderId\":\"27bdc7cd-a5dd-45bc-bba8-66de31d4edb6\",\"userId\":\"1c43f1f2-e916-4f00-b3a3-3383c596a898\"}" ]
+        const dataidx = fields.findIndex((f) => f === "data");
+        const closeOrderId = fields[dataidx - 1];
+        if (!closeOrderId) {
+          console.log("uid not found");
+          return;
+        }
+        const jsonstr = fields[dataidx + 1];
+        if (!jsonstr) return;
+
+        const parsedData = JSON.parse(jsonstr);
+        const { orderId } = parsedData;
+        const order = pendingOrders.find((o) => o.data.orderId == orderId);
+        if (!order) {
+          console.log("order not found");
+          return;
+        }
+        const priceInfo = latestPrice[order?.data.asset];
+        if (!priceInfo) return;
+        const closingPrice = priceInfo?.price / 10 ** priceInfo?.decimal;
+        // console.log("closeing", closingPrice);
+        const result = await closeOrder({
+          orderId,
+          closingPrice,
+          uid: closeOrderId,
+        });
+        // console.log("orderID", orderId);
+      }
+    } catch {}
+  }
+}
+
+//liquidation
+const autoClose = async ({ symbol, price }: CheckOrdersParams) => {
+  for (const { id: orderId, data: order } of pendingOrders) {
+    if (order.asset.toLowerCase() !== symbol.toLowerCase()) continue;
+
+    const shouldClose =
+      (order.type === "long" &&
+        order.stopLoss !== undefined &&
+        price <= order.stopLoss) ||
+      (order.type === "short" &&
+        order.stopLoss !== undefined &&
+        price >= order.stopLoss);
+
+    if (shouldClose) {
+      await closeOrder({ orderId, closingPrice: price })
+        .then((res) => console.log("Order closed successfully", res))
+        .catch((err) => console.log("Error closing order", err));
+    }
+  }
+};
+
 export async function main() {
   try {
     console.log("Starting consumers...");
     // setInterval(() => {
     //   console.log(
-    //     "📊 latestPrice snapshot:",
+    //     "latestPrice snapshot:",
     //     JSON.stringify(latestPrice, null, 2)
     //   );
     // }, 1000);
     // Run consumers concurrently
-    await Promise.all([consumePrices(), consumeOrders()]);
+    await Promise.all([consumePrices(), consumeOrders(), OrderClose()]);
   } catch (error) {
     console.error("Error in main:", error);
   }

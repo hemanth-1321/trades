@@ -1,6 +1,5 @@
 import { Redis } from "ioredis";
 import { subscriberClient } from "../libs/redis";
-import { resolve } from "bun";
 type CallbackData = {
   orderId: string;
   userId: string;
@@ -13,6 +12,7 @@ type CallbackData = {
   exposure: number;
   stopLoss: number;
   processed: boolean;
+  closingPrice?: number;
 };
 
 export class CallbackQueueConsumer {
@@ -71,7 +71,9 @@ export class CallbackQueueConsumer {
       this.callbacks[callbackId] = resolve;
       setTimeout(() => {
         if (this.callbacks[callbackId]) {
-          reject();
+          delete this.callbacks[callbackId];
+
+          reject(new Error("Timeout waiting for callback"));
         }
       }, 5000);
     });

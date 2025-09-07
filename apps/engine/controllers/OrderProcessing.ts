@@ -1,8 +1,8 @@
 import { pendingOrders, type Order } from "./states";
 import { prisma } from "@repo/db/client";
-import { redis } from "@repo/redis/client";
+import { callbackRedis as redis } from "../redis/index";
 
-interface CheckOrdersParams {
+export interface CheckOrdersParams {
   symbol: string;
   price: number;
 }
@@ -10,6 +10,7 @@ interface CheckOrdersParams {
 /**
  * Creates an order by pushing it to the in-memory array `pendingOrders`
  */
+
 export const createOrder = async (
   order: Order,
   id: string,
@@ -23,15 +24,17 @@ export const createOrder = async (
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new Error("User not found");
 
-    const exposure = openingPrice * quantity * leverage!;
+    const exposure = openingPrice * quantity;
     order.exposure = exposure;
 
-    if (user.balance <= openingPrice) {
+    const requiredMargin = exposure / leverage!;
+    if (user.balance < requiredMargin) {
       console.log("Insufficient balance");
-      return;
+      return { success: false, message: "Insufficient balance" };
     }
 
-    const newBalance = user.balance - openingPrice;
+    const newBalance = user.balance - requiredMargin;
+
     await prisma.user.update({
       where: { id: user.id },
       data: { balance: newBalance },
@@ -43,6 +46,7 @@ export const createOrder = async (
     order.processed = true;
 
     // Add to in-memory pending orders and push to Redis
+
     pendingOrders.push({ id, data: order });
     redis.xadd(
       "callback-queue",
@@ -62,56 +66,65 @@ export const createOrder = async (
 };
 
 /**
- * Automatically closes orders if stop loss conditions are met
- */
-export const autoClose = async ({ symbol, price }: CheckOrdersParams) => {
-  for (const { id: orderId, data: order } of pendingOrders) {
-    if (order.asset.toLowerCase() !== symbol.toLowerCase()) continue;
-
-    const shouldClose =
-      (order.type === "long" &&
-        order.stopLoss !== undefined &&
-        price <= order.stopLoss) ||
-      (order.type === "short" &&
-        order.stopLoss !== undefined &&
-        price >= order.stopLoss);
-
-    if (shouldClose) {
-      await closeOrder({ orderId, closingPrice: price })
-        .then((res) => console.log("Order closed successfully", res))
-        .catch((err) => console.log("Error closing order", err));
-    }
-  }
-};
-
-/**
  * Closes an order and updates user balance
  */
+
 export const closeOrder = async ({
   orderId,
   closingPrice,
+  uid,
 }: {
   orderId: string;
   closingPrice: number;
+  uid?: string;
 }) => {
-  const orderEntry = pendingOrders.find((o) => o.id === orderId);
-  if (!orderEntry) return { status: 404, message: "Order not found" };
+  const orderEntry = pendingOrders.find((o) => o.data.orderId === orderId);
+
+  if (!orderEntry) {
+    return { status: 404, message: "Order not found" };
+  }
 
   const user = await prisma.user.findUnique({
     where: { id: orderEntry.data.userId },
   });
+
   if (!user) return { status: 404, message: "User not found" };
 
   const pnl = calculatePnl(orderEntry.data, closingPrice);
 
-  await prisma.user.update({
-    where: { id: orderEntry.data.userId },
-    data: { balance: user.balance + pnl },
-  });
+  try {
+    await prisma.user.update({
+      where: { id: orderEntry.data.userId },
+      data: { balance: user.balance + pnl },
+    });
+    console.log("User balance updated successfully");
+  } catch (error) {
+    console.error("Error updating user balance:", error);
+    return { status: 500, message: "Database update failed" };
+  }
 
-  // Remove order from pendingOrders
-  const index = pendingOrders.findIndex((o) => o.id === orderId);
-  if (index > -1) pendingOrders.splice(index, 1);
+  const index = pendingOrders.findIndex((o) => o.data.orderId === orderId);
+
+  const payload = {
+    closingPrice,
+    ...orderEntry.data,
+  };
+  if (index > -1) {
+    pendingOrders.splice(index, 1);
+    redis.xadd(
+      "callback-queue",
+      "*",
+      "uid",
+      uid!,
+      "data",
+      JSON.stringify(payload)
+    );
+  } else {
+    console.log("Order not found in pendingOrders for removal");
+    console.log(pendingOrders.map((o) => o.data.orderId));
+  }
+
+  return { status: 200, message: "Order closed successfully", pnl };
 };
 
 /**
